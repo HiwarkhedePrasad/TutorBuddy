@@ -1,0 +1,50 @@
+@import "tailwindcss";
+.ai-response {
+  background: #f9f9f9;
+  padding: 12px;
+  border-radius: 8px;
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
+  margin-bottom: 10px;
+  font-size: 16px;
+}
+
+.code-snippet {
+  background: #282c34;
+  color: #ffffff;
+  padding: 10px;
+  border-radius: 5px;
+  font-family: monospace;
+  overflow-x: auto;
+}
+
+@keyframes typing {
+  from {
+    width: 0;
+  }
+}
+
+.typing-indicator {
+  width: 5px;
+  height: 5px;
+  background: #aaa;
+  border-radius: 50%;
+  animation: typing 1.5s infinite alternate;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px; /* Slim scrollbar */
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888; /* Gray thumb */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555; /* Darker on hover */
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1; /* Light background */
+}
