@@ -48,7 +48,7 @@ const initializeSocket = (server) => {
     // ✅ Prevent multiple initializations
     io = new Server(server, {
       cors: {
-        origin: "http://localhost:3000",
+        origin: "https://tutor-buddy-lovat.vercel.app/",
       },
     });
 
