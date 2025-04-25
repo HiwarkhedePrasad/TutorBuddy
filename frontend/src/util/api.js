@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE_URL = "http://localhost:5000/api"; // Adjust based on your backend URL
+const API_BASE_URL = "https://tutorbuddy.onrender.com/api"; // Adjust based on your backend URL
 
 export const fetchAllCourses = async () => {
   try {

@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 // Socket connection - create once at module level
-const socket = io("http://localhost:5000");
+const socket = io("wss://tutorbuddy.onrender.com");
 
 // Components
 const CourseSidebar = ({

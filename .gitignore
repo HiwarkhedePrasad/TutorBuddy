@@ -1,0 +1,47 @@
+# Node modules
+node_modules/
+.env
+.env.local
+.env.production
+.env.development
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Dependency directories
+/frontend/node_modules
+/backend/node_modules
+
+# Build output
+/dist
+/build
+/.next
+/out
+
+# System files
+.DS_Store
+Thumbs.db
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+
+# Render build cache
+render.yaml
+
+# OS metadata
+*.pid
+
+# Others
+coverage/
+*.tgz
+
+# Local database / runtime
+*.sqlite
+*.db
+*.local
+.cache
+.next/
