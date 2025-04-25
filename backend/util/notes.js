@@ -4,7 +4,7 @@ import axios from "axios";
 const setupSocket = (server) => {
   const io = new Server(server, {
     cors: {
-      origin: "http://localhost:3000",
+      origin: "https://tutor-buddy-lovat.vercel.app/",
       methods: ["GET", "POST"],
     },
   });
