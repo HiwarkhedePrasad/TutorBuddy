@@ -554,36 +554,47 @@ const Notes = () => {
     setAiResponse("");
   };
 
-  // Handle AI Question
+
+
   const handleAskAI = async () => {
     if (!userQuestion.trim()) return;
     setLoadingResponse(true);
     setAiResponse("");
-
+  
     try {
-      const response = await axios.post("http://127.0.0.1:11434/api/chat", {
-        model: "qwen2.5-coder:7b",
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert tutor answering questions based on the selected text.`,
+      const response = await axios.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        {
+          model: "mixtral-8x7b-32768", // or whichever Groq model you want
+          messages: [
+            {
+              role: "system",
+              content: `You are an expert tutor answering questions based on the selected text.`,
+            },
+            {
+              role: "user",
+              content: `Context: "${selectedText}". Question: "${userQuestion}". Provide a detailed and concise answer.`,
+            },
+          ],
+          stream: false, // if you want streaming, it can be true
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`, // ✅ pulled from .env
           },
-          {
-            role: "user",
-            content: `Context: "${selectedText}". Question: "${userQuestion}". Provide a detailed and concise answer.`,
-          },
-        ],
-        stream: false,
-      });
-
-      setAiResponse(response.data.message.content);
+        }
+      );
+  
+      setAiResponse(response.data.choices[0].message.content);
     } catch (error) {
+      console.error(error);
       setAiResponse("❌ Failed to fetch AI response.");
     }
-
+  
     setLoadingResponse(false);
   };
-
+  
   // Close context menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
