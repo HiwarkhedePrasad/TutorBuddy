@@ -1,6 +1,5 @@
 import { Server } from "socket.io";
 import axios from "axios";
-import AiChat from "../models/aiChat.js";
 import dotenv from "dotenv";
 
 // Load environment variables
@@ -12,112 +11,45 @@ if (!GROQ_API_KEY) {
   console.error("⚠️ GROQ_API_KEY is not defined in environment variables!");
 }
 
-let io; // Global io instance
-
-// Updated Map of available models in Groq (April 2025)
-// Removed the decommissioned mixtral-8x7b-32768
+// Define available models
 const GROQ_MODELS = {
-  // For chat functionality
-  "qwen-2.5": "llama3-70b-8192",
-  mistral: "llama3-8b-8192", // Updated from mixtral-8x7b-32768 to a supported model
+  "notes-generation": "llama3-70b-8192", // Using powerful model for note generation
   default: "llama3-8b-8192",
-
-  // For notes generation (using a powerful model)
-  "notes-generation": "llama3-70b-8192",
 };
 
-// Utility function to consolidate consecutive user messages
-const consolidateMessages = (messages) => {
-  if (!messages || messages.length <= 1) return messages;
-
-  return messages.reduce((acc, current, index, array) => {
-    // Skip if this message is a duplicate of the previous one
-    const prev = array[index - 1];
-    if (prev && current.role === "user" && prev.role === "user") {
-      // Instead of skipping completely, combine messages if they're duplicates
-      acc[acc.length - 1].content += "\n" + current.content;
-      return acc;
-    }
-    acc.push(current);
-    return acc;
-  }, []);
-};
+let io; // Global io instance to prevent multiple initializations
 
 const initializeSocket = (server) => {
   if (!io) {
-    // ✅ Prevent multiple initializations
     io = new Server(server, {
       cors: {
-        origin: "http://localhost:3000",
+        origin: [
+          "https://tutor-buddy-lovat.vercel.app",
+          "http://localhost:3000",
+        ],
+        methods: ["GET", "POST"],
+        credentials: true,
       },
     });
 
     io.on("connection", (socket) => {
       console.log("🟢 New client connected:", socket.id);
 
-      // 📌 AI Chat Handling
-      socket.on("chatMessage", async ({ userId, message, model }) => {
-        console.log("Received chatMessage from:", socket.id);
+      // Handle notes generation request
+      socket.on("generate-notes", async (topic) => {
+        console.log(`📝 Generating notes for topic: ${topic.title || topic}`);
+
+        // Reset any previous state
+        let notesContent = "";
 
         try {
-          if (!userId) {
-            socket.emit("error", { error: "User ID is required" });
-            return;
+          if (!GROQ_API_KEY) {
+            throw new Error("API key is missing");
           }
 
-          // Get the appropriate Groq model
-          const selectedModel = GROQ_MODELS[model] || GROQ_MODELS.default;
-          console.log(`Using Groq model: ${selectedModel}`);
+          console.log("Sending request to Groq API...");
 
-          const chatHistory = await AiChat.findOne({ user: userId }).lean();
-          const lastMessages = chatHistory?.messages?.slice(-8) || [];
-
-          // First, add the new message to the database
-          await AiChat.findOneAndUpdate(
-            { user: userId },
-            { $push: { messages: { role: "user", content: message } } },
-            { upsert: true, new: true }
-          );
-
-          // Format messages for Groq API
-          let formattedMessages = lastMessages.map((msg) => ({
-            role: msg.role === "ai" ? "assistant" : msg.role, // Groq uses "assistant" instead of "ai"
-            content: msg.content,
-          }));
-
-          // Add the current message
-          formattedMessages.push({ role: "user", content: message });
-
-          // Apply message consolidation to avoid API issues with duplicate messages
-          formattedMessages = consolidateMessages(formattedMessages);
-
-          console.log(
-            "Sending request to Groq with context:",
-            formattedMessages
-          );
-
-          // Verify the API key before making the request
-          if (!GROQ_API_KEY || GROQ_API_KEY.trim() === "") {
-            throw new Error("API key is missing or invalid");
-          }
-
-          // Ensure we have alternating user/assistant messages for better API compliance
-          const validatedMessages = [];
-          let lastRole = null;
-
-          for (const msg of formattedMessages) {
-            if (lastRole !== msg.role) {
-              validatedMessages.push(msg);
-              lastRole = msg.role;
-            } else if (msg.role === "user") {
-              // If we have consecutive user messages, combine their content
-              validatedMessages[validatedMessages.length - 1].content +=
-                "\n" + msg.content;
-            }
-            // Skip consecutive assistant messages as they shouldn't occur in your data model
-          }
-
-          // Handle streaming responses properly
+          // Make request to Groq API
           const response = await axios({
             method: "post",
             url: "https://api.groq.com/openai/v1/chat/completions",
@@ -126,156 +58,33 @@ const initializeSocket = (server) => {
               "Content-Type": "application/json",
             },
             data: {
-              model: selectedModel,
-              messages: validatedMessages,
-              stream: true, // Set to true for streaming
-              max_tokens: 1024, // Adding a reasonable limit to avoid issues
-            },
-            responseType: "stream", // Keep as stream
-          });
-
-          let aiResponse = "";
-
-          response.data.on("data", (chunk) => {
-            const chunkStr = chunk.toString().trim();
-
-            // Groq sends "data: " prefixed SSE format
-            const lines = chunkStr
-              .split("\n")
-              .filter((line) => line.trim() !== "");
-
-            for (const line of lines) {
-              if (line === "data: [DONE]") continue;
-
-              try {
-                // Remove "data: " prefix if present
-                const jsonStr = line.startsWith("data: ")
-                  ? line.slice(5)
-                  : line;
-
-                // Skip empty lines
-                if (!jsonStr.trim()) continue;
-
-                const parsedChunk = JSON.parse(jsonStr);
-
-                if (
-                  parsedChunk.choices &&
-                  parsedChunk.choices[0]?.delta?.content
-                ) {
-                  const responseText = parsedChunk.choices[0].delta.content;
-                  aiResponse += responseText;
-                  console.log("Sending to frontend:", responseText);
-                  socket.emit("aiResponse", { word: responseText });
-                }
-              } catch (error) {
-                console.error("Error parsing chunk:", error, "Line:", line);
-              }
-            }
-          });
-
-          response.data.on("end", async () => {
-            console.log("Stream ended, full AI response:", aiResponse);
-            socket.emit("aiResponseEnd");
-
-            // Only save to database if we got a response
-            if (aiResponse.trim()) {
-              await AiChat.findOneAndUpdate(
-                { user: userId },
-                { $push: { messages: { role: "ai", content: aiResponse } } },
-                { new: true }
-              );
-            }
-          });
-
-          response.data.on("error", (error) => {
-            console.error("Stream error:", error);
-            socket.emit("error", { error: "AI stream error" });
-          });
-        } catch (error) {
-          // Enhanced error logging
-          if (error.response) {
-            console.error("Groq API Error Response:", {
-              status: error.response.status,
-              headers: error.response.headers,
-            });
-
-            // If the response has a readable stream, log its content
-            if (
-              error.response.data &&
-              typeof error.response.data.pipe === "function"
-            ) {
-              let errorData = "";
-              error.response.data.on("data", (chunk) => {
-                errorData += chunk.toString();
-              });
-              error.response.data.on("end", () => {
-                console.error("Groq API Error Body:", errorData);
-
-                try {
-                  const parsedError = JSON.parse(errorData);
-                  if (
-                    parsedError.error &&
-                    parsedError.error.code === "model_decommissioned"
-                  ) {
-                    console.error(
-                      `Model ${
-                        parsedError.error.message.split("`")[1]
-                      } is decommissioned. Falling back to default model.`
-                    );
-                    // Could implement auto-retry with default model here
-                  }
-                } catch (parseError) {
-                  console.error("Could not parse error body as JSON");
-                }
-              });
-            }
-          }
-
-          console.error("AI chat error:", error);
-          socket.emit("error", {
-            error: "AI chat failed",
-            details: error.message,
-          });
-        }
-      });
-
-      // 📌 Dynamic Notes Generation with HTML Output
-      socket.on("generate-notes", async ({ title }) => {
-        console.log(`📝 Generating notes for topic: ${title}`);
-
-        try {
-          const response = await axios({
-            method: "post",
-            url: "https://api.groq.com/openai/v1/chat/completions",
-            headers: {
-              Authorization: `Bearer ${GROQ_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            data: {
-              model: GROQ_MODELS["notes-generation"], // Using the most powerful model available
+              model: GROQ_MODELS["notes-generation"],
               messages: [
                 {
                   role: "system",
-                  content: `You are an expert tutor creating interactive study notes. 
-                            Ensure proper spacing between words in all content. `,
+                  content: `You are an expert tutor creating detailed interactive study notes.
+                           Ensure proper spacing and formatting in all content.`,
                 },
                 {
                   role: "user",
-                  content: `Generate a well-structured, interactive lesson (at least 250 lines) for "${title}". `,
+                  content: `Generate well-structured, comprehensive educational notes for "${
+                    topic.title || topic
+                  }".
+                           Include definitions, examples, key concepts, and visual descriptions where appropriate.
+                           Format the content with clear headings, subheadings, and bullet points.`,
                 },
               ],
               stream: true,
-              max_tokens: 4096, // Adding a reasonable limit
+              max_tokens: 4096,
             },
             responseType: "stream",
           });
 
-          let notesContent = "";
-
+          // Handle streaming response
           response.data.on("data", (chunk) => {
             const chunkStr = chunk.toString().trim();
 
-            // Groq sends "data: " prefixed SSE format
+            // Process SSE format chunks from Groq
             const lines = chunkStr
               .split("\n")
               .filter((line) => line.trim() !== "");
@@ -300,52 +109,47 @@ const initializeSocket = (server) => {
                 ) {
                   const responseText = parsedChunk.choices[0].delta.content;
                   notesContent += responseText;
-                  console.log("Sending chunk:", responseText);
+                  console.log("Sending chunk to frontend");
                   socket.emit("notes-update", responseText);
                 }
               } catch (error) {
-                console.error("❌ Error parsing chunk:", error, "Line:", line);
+                console.error("Error parsing chunk:", error, "Line:", line);
               }
             }
           });
 
+          // Handle end of stream
           response.data.on("end", () => {
-            console.log("✅ Notes generation completed.");
+            console.log(
+              "✅ Stream completed, total length:",
+              notesContent.length
+            );
             socket.emit("notes-complete");
           });
 
+          // Handle stream errors
           response.data.on("error", (error) => {
             console.error("❌ Stream error:", error);
-            socket.emit("error", { error: "AI stream error" });
+            socket.emit("error", { error: "Notes generation stream error" });
           });
         } catch (error) {
-          // Enhanced error logging for notes generation
+          console.error("❌ Notes generation error:", error);
+
+          // Detailed error reporting
           if (error.response) {
-            console.error("Notes Generation API Error:", {
+            console.error("API Error Response:", {
               status: error.response.status,
               headers: error.response.headers,
             });
-
-            // Handle model decommissioned errors
-            if (
-              error.response.data &&
-              typeof error.response.data.pipe === "function"
-            ) {
-              let errorData = "";
-              error.response.data.on("data", (chunk) => {
-                errorData += chunk.toString();
-              });
-              error.response.data.on("end", () => {
-                console.error("Notes Generation API Error Body:", errorData);
-              });
-            }
           }
 
-          console.error("❌ Notes generation error:", error.message);
           socket.emit("error", {
             error: "Failed to generate notes",
             details: error.message,
           });
+
+          // Also send notes-complete to unblock the UI
+          socket.emit("notes-complete");
         }
       });
 

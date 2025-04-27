@@ -3,7 +3,9 @@ import io from "socket.io-client";
 import axios from "axios";
 import { useUser } from "@clerk/clerk-react";
 
-const socket = io("http://localhost:5000", { transports: ["websocket"] });
+const socket = io("https://tutorbuddy.onrender.com", {
+  transports: ["websocket"],
+});
 
 const AiTutorChat = () => {
   const [message, setMessage] = useState("");
@@ -39,7 +41,7 @@ const AiTutorChat = () => {
       if (user) {
         try {
           const response = await axios.get(
-            `http://localhost:5000/api/ai/chat/${user.id}`
+            `https://tutorbuddy.onrender.com/api/ai/chat/${user.id}`
           );
           setMessages(
             response.data.messages.map((msg) => ({

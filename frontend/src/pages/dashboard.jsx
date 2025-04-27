@@ -101,7 +101,7 @@ const Sidebar = ({ isSignedIn, user, isOpen, onClose }) => (
 const useUserRegistration = (isSignedIn, user) => {
   useEffect(() => {
     if (isSignedIn && user) {
-      fetch("http://localhost:5000/api/auth/register", {
+      fetch("https://tutorbuddy.onrender.com/api/auth/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -40,13 +40,16 @@ const CourseDetails = () => {
         throw new Error("User not authenticated.");
       }
 
-      const response = await fetch("http://localhost:5000/api/enroll", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ userId: clerkUserId, courseId }),
-      });
+      const response = await fetch(
+        "https://tutorbuddy.onrender.com/api/enroll",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ userId: clerkUserId, courseId }),
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();

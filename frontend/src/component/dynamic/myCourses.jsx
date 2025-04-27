@@ -20,7 +20,7 @@ const MyCourses = () => {
       setLoading(true);
       try {
         const response = await fetch(
-          `http://localhost:5000/api/user/${user.id}`
+          `https://tutorbuddy.onrender.com/api/user/${user.id}`
         );
         if (!response.ok) {
           throw new Error("Failed to fetch enrolled courses.");
