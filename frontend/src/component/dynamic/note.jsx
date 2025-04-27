@@ -555,7 +555,6 @@ const Notes = () => {
   };
 
 
-
   const handleAskAI = async () => {
     if (!userQuestion.trim()) return;
     setLoadingResponse(true);
@@ -565,7 +564,7 @@ const Notes = () => {
       const response = await axios.post(
         "https://api.groq.com/openai/v1/chat/completions",
         {
-          model: "mixtral-8x7b-32768", // or whichever Groq model you want
+          model: "mixtral-8x7b-32768", // or "llama3-70b-8192"
           messages: [
             {
               role: "system",
@@ -576,19 +575,20 @@ const Notes = () => {
               content: `Context: "${selectedText}". Question: "${userQuestion}". Provide a detailed and concise answer.`,
             },
           ],
-          stream: false, // if you want streaming, it can be true
+          temperature: 0.7, // <-- important, Groq expects it
+          stream: false
         },
         {
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`, // ✅ pulled from .env
+            "Authorization": `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
           },
         }
       );
   
       setAiResponse(response.data.choices[0].message.content);
     } catch (error) {
-      console.error(error);
+      console.error("Error from Groq:", error.response?.data || error.message);
       setAiResponse("❌ Failed to fetch AI response.");
     }
   
