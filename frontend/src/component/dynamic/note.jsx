@@ -146,6 +146,33 @@ const VoiceSettings = ({
   </div>
 );
 
+// Enhanced text selection component
+const SelectionPopover = ({
+  showPopover,
+  popoverPosition,
+  handleShowContextMenu,
+  isVisible,
+}) => {
+  if (!showPopover || !isVisible) return null;
+
+  return (
+    <div
+      className="fixed bg-blue-600 text-white px-3 py-1 rounded-md shadow-lg z-50"
+      style={{
+        top: popoverPosition.y - 40, // Position above the selection
+        left: popoverPosition.x,
+      }}
+    >
+      <button
+        className="text-sm font-medium"
+        onClick={handleShowContextMenu}
+      >
+        Ask AI
+      </button>
+    </div>
+  );
+};
+
 const NotesContent = ({
   selectedTopic,
   notes,
@@ -160,8 +187,13 @@ const NotesContent = ({
   onRateChange,
   showVoiceSettings,
   toggleVoiceSettings,
+  onSelectionChange,
 }) => (
-  <div className="w-full lg:w-3/4 p-4 lg:p-6 bg-gray-100 max-h-screen overflow-y-auto">
+  <div 
+    className="w-full lg:w-3/4 p-4 lg:p-6 bg-gray-100 max-h-screen overflow-y-auto"
+    onMouseUp={onSelectionChange}
+    onTouchEnd={onSelectionChange}
+  >
     {selectedTopic ? (
       <div>
         <h1 className="text-xl lg:text-2xl font-bold">{selectedTopic.title}</h1>
@@ -238,12 +270,14 @@ const AIContextMenu = ({
   loadingResponse,
   handleAskAI,
   closeContextMenu,
+  isMobile,
 }) => (
   <div
-    className="fixed bg-white shadow-lg border rounded-lg p-4 z-50 w-11/12 max-w-md"
+    className="fixed bg-white shadow-lg border rounded-lg p-4 z-50 w-11/12 max-w-md ai-context-menu"
     style={{
-      top: contextMenu.y,
-      left: Math.min(contextMenu.x, window.innerWidth - 320),
+      top: isMobile ? "50%" : contextMenu.y,
+      left: isMobile ? "50%" : Math.min(contextMenu.x, window.innerWidth - 320),
+      transform: isMobile ? "translate(-50%, -50%)" : "none",
     }}
   >
     <div className="flex justify-between items-center mb-2">
@@ -334,12 +368,21 @@ const Notes = () => {
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
   const speechSynthesisRef = useRef(null);
 
+  // Text selection state
+  const [showPopover, setShowPopover] = useState(false);
+  const [popoverPosition, setPopoverPosition] = useState({ x: 0, y: 0 });
+  const [selectedText, setSelectedText] = useState("");
+  const [isPopoverVisible, setIsPopoverVisible] = useState(false);
+  const popoverTimerRef = useRef(null);
+
   // AI Context Menu State
   const [contextMenu, setContextMenu] = useState(null);
-  const [selectedText, setSelectedText] = useState("");
   const [userQuestion, setUserQuestion] = useState("");
   const [aiResponse, setAiResponse] = useState("");
   const [loadingResponse, setLoadingResponse] = useState(false);
+
+  // Content container ref for calculating correct positions
+  const contentRef = useRef(null);
 
   // Handle window resize for responsive layout
   useEffect(() => {
@@ -535,16 +578,65 @@ const Notes = () => {
     speakText(notes);
   };
 
-  // AI Context Menu functions
+  // Enhanced text selection handling
+  const handleSelectionChange = (event) => {
+    // Clear any existing timers
+    if (popoverTimerRef.current) {
+      clearTimeout(popoverTimerRef.current);
+    }
+
+    // Get the current selection
+    const selection = window.getSelection();
+    const text = selection.toString().trim();
+
+    if (text) {
+      setSelectedText(text);
+
+      // Get position for the popover - works for both touch and mouse
+      const range = selection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+
+      // Calculate position - center horizontally, above the selection
+      const x = Math.max(0, rect.x + rect.width / 2 - 40); // Center the popover
+      const y = Math.max(40, rect.y); // Ensure it's not off the top of the screen
+
+      setPopoverPosition({ x, y });
+      setShowPopover(true);
+      
+      // Show popover after a short delay to improve UX
+      popoverTimerRef.current = setTimeout(() => {
+        setIsPopoverVisible(true);
+      }, 200);
+
+    } else {
+      // Hide popover after short delay (allows clicking the popover)
+      popoverTimerRef.current = setTimeout(() => {
+        setShowPopover(false);
+        setIsPopoverVisible(false);
+      }, 300);
+    }
+  };
+
+  // Show context menu when Ask AI button in popover is clicked
+  const handleShowContextMenu = () => {
+    setContextMenu({
+      x: popoverPosition.x,
+      y: popoverPosition.y + 40
+    });
+    setShowPopover(false);
+  };
+
   const handleRightClick = (event) => {
-    event.preventDefault();
-    const selection = window.getSelection().toString().trim();
-    if (selection) {
-      setSelectedText(selection);
-      setContextMenu({
-        x: event.clientX,
-        y: event.clientY,
-      });
+    if (!isMobile) {
+      event.preventDefault();
+      const selection = window.getSelection().toString().trim();
+      if (selection) {
+        setSelectedText(selection);
+        setContextMenu({
+          x: event.clientX,
+          y: event.clientY,
+        });
+      }
     }
   };
 
@@ -553,7 +645,6 @@ const Notes = () => {
     setUserQuestion("");
     setAiResponse("");
   };
-
 
   const handleAskAI = async () => {
     if (!userQuestion.trim()) return;
@@ -564,7 +655,7 @@ const Notes = () => {
       const response = await axios.post(
         "https://api.groq.com/openai/v1/chat/completions",
         {
-          model: "llama3-70b-8192" , // or "llama3-70b-8192"
+          model: "llama3-70b-8192",
           messages: [
             {
               role: "system",
@@ -575,7 +666,7 @@ const Notes = () => {
               content: `Context: "${selectedText}". Question: "${userQuestion}". Provide a detailed and concise answer.`,
             },
           ],
-          temperature: 0.7, // <-- important, Groq expects it
+          temperature: 0.7,
           stream: false
         },
         {
@@ -597,7 +688,6 @@ const Notes = () => {
       }
     }
     
-  
     setLoadingResponse(false);
   };
   
@@ -613,10 +703,20 @@ const Notes = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [contextMenu]);
 
+  // Clean up selection popover timer
+  useEffect(() => {
+    return () => {
+      if (popoverTimerRef.current) {
+        clearTimeout(popoverTimerRef.current);
+      }
+    };
+  }, []);
+
   return (
-    <div
+    <div 
       className="flex flex-col lg:flex-row h-screen relative"
       onContextMenu={handleRightClick}
+      ref={contentRef}
     >
       {/* Mobile Header */}
       {isMobile && (
@@ -649,6 +749,7 @@ const Notes = () => {
         onRateChange={handleRateChange}
         showVoiceSettings={showVoiceSettings}
         toggleVoiceSettings={toggleVoiceSettings}
+        onSelectionChange={handleSelectionChange}
       />
 
       {/* Course Sidebar */}
@@ -668,20 +769,27 @@ const Notes = () => {
         />
       )}
 
+      {/* Text Selection Popover */}
+      <SelectionPopover
+        showPopover={showPopover}
+        popoverPosition={popoverPosition}
+        handleShowContextMenu={handleShowContextMenu}
+        isVisible={isPopoverVisible}
+      />
+
       {/* AI Context Menu */}
       {contextMenu && (
-        <div className="ai-context-menu">
-          <AIContextMenu
-            contextMenu={contextMenu}
-            selectedText={selectedText}
-            userQuestion={userQuestion}
-            setUserQuestion={setUserQuestion}
-            aiResponse={aiResponse}
-            loadingResponse={loadingResponse}
-            handleAskAI={handleAskAI}
-            closeContextMenu={closeContextMenu}
-          />
-        </div>
+        <AIContextMenu
+          contextMenu={contextMenu}
+          selectedText={selectedText}
+          userQuestion={userQuestion}
+          setUserQuestion={setUserQuestion}
+          aiResponse={aiResponse}
+          loadingResponse={loadingResponse}
+          handleAskAI={handleAskAI}
+          closeContextMenu={closeContextMenu}
+          isMobile={isMobile}
+        />
       )}
     </div>
   );
