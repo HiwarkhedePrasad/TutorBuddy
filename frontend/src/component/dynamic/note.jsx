@@ -588,9 +588,15 @@ const Notes = () => {
   
       setAiResponse(response.data.choices[0].message.content);
     } catch (error) {
-      console.error("Error from Groq:", error.response?.data || error.message);
-      setAiResponse("❌ Failed to fetch AI response.");
+      if (error.response) {
+        console.error("Error from Groq:", error.response.data);
+        setAiResponse(`❌ Groq Error: ${error.response.data.error.message}`);
+      } else {
+        console.error("Error:", error.message);
+        setAiResponse("❌ Failed to fetch AI response.");
+      }
     }
+    
   
     setLoadingResponse(false);
   };
